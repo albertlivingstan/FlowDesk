@@ -19,12 +19,18 @@ def deliver(message: EmailMessage, settings: Settings) -> str:
         return "failed"
     smtp_class = smtplib.SMTP_SSL if settings.smtp_ssl else smtplib.SMTP
     options = {"timeout": settings.http_timeout_seconds}
+    try:
+        import certifi
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        ssl_context = ssl.create_default_context()
+
     if settings.smtp_ssl:
-        options["context"] = ssl.create_default_context()
+        options["context"] = ssl_context
     try:
         with smtp_class(settings.smtp_host, settings.smtp_port, **options) as server:
             if settings.smtp_starttls:
-                server.starttls(context=ssl.create_default_context())
+                server.starttls(context=ssl_context)
             if settings.smtp_user:
                 server.login(settings.smtp_user, settings.smtp_pass.get_secret_value())
             refused = server.send_message(message)
