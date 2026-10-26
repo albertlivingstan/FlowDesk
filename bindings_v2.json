@@ -1,0 +1,27 @@
+{
+  "version": "2.0",
+  "resources": [
+    {
+      "resource": "EventTrigger",
+      "key": "698f64bc-75fb-4918-90e3-a297d5c3be02",
+      "activityId": "New_Record_Created_1",
+      "activityDisplayName": "New Record Created",
+      "value": {
+        "ConnectionId": {
+          "defaultValue": "698f64bc-75fb-4918-90e3-a297d5c3be02",
+          "isExpression": false
+        }
+      },
+      "metadata": {
+        "UseConnectionService": "true",
+        "Connector": "uipath-google-gmail",
+        "ActivityName": "New Record Created",
+        "BindingsVersion": "2.2",
+        "ObjectName": "Message",
+        "Operation": "CREATED",
+        "FilterExpression": "",
+        "SolutionsSupport": "true"
+      }
+    }
+  ]
+}

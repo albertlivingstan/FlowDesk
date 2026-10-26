@@ -1,0 +1,5 @@
+{
+  "emailSubject": "Login problem",
+  "emailBody": "I can't log in since this morning",
+  "senderEmail": "customer@example.com"
+}

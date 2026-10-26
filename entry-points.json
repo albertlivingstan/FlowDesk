@@ -1,0 +1,32 @@
+{
+  "$schema": "https://cloud.uipath.com/draft/2024-12/entry-point",
+  "$id": "entry-points.json",
+  "entryPoints": [
+    {
+      "filePath": "content/new.bpmn#manualTrigger1",
+      "uniqueId": "1b957bb9-2a32-47bb-99b8-2a8d891d7d83",
+      "type": "processorchestration",
+      "input": {
+        "type": "object",
+        "properties": {
+          "emailSubject": { "type": "string" },
+          "emailBody": { "type": "string" },
+          "senderEmail": { "type": "string" },
+          "receivedAt": { "type": "string" }
+        },
+        "required": ["emailSubject", "emailBody", "senderEmail"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "isTicket": { "type": "boolean" },
+          "ticketKey": { "type": "string" },
+          "ticketUrl": { "type": "string" },
+          "status": { "type": "string", "enum": ["created", "ignored", "needs_review", "failed"] }
+        },
+        "required": ["isTicket", "ticketKey", "ticketUrl", "status"]
+      },
+      "displayName": "Email to Ticket"
+    }
+  ]
+}

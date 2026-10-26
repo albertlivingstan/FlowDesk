@@ -1,0 +1,5 @@
+{
+  "emailSubject": "Weekly newsletter",
+  "emailBody": "Read this week's product updates. Unsubscribe here.",
+  "senderEmail": "news@example.com"
+}

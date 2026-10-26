@@ -1,0 +1,5 @@
+{
+  "emailSubject": "Help",
+  "emailBody": "Something seems odd. Can you help?",
+  "senderEmail": "customer@example.com"
+}
