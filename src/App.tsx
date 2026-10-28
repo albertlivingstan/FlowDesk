@@ -20,10 +20,8 @@ import {
   Plus,
   X,
   SlidersHorizontal,
-  Search,
-  Utensils
+  Search
 } from 'lucide-react';
-import BurgundyBurgerExperience from './components/BurgundyBurgerExperience';
 
 interface Ticket {
   id: number;
@@ -262,7 +260,7 @@ function StatusDurationChart({ durations }: { durations: { status: string; avgHo
 export default function App() {
   const [apiKey, setApiKey] = useState('');
   const [connected, setConnected] = useState(false);
-  const [activeView, setActiveView] = useState<'overview' | 'tickets' | 'analytics' | 'automation' | 'kb' | 'team' | 'settings' | 'burger'>('overview');
+  const [activeView, setActiveView] = useState<'overview' | 'tickets' | 'analytics' | 'automation' | 'kb' | 'team' | 'settings'>('overview');
   const [daysRange, setDaysRange] = useState(30);
 
   // Tickets state
@@ -288,6 +286,78 @@ export default function App() {
   const [editStatus, setEditStatus] = useState<'Open' | 'In Progress' | 'Resolved' | 'Closed'>('Open');
   const [editPriority, setEditPriority] = useState<'Normal' | 'High' | 'Critical'>('Normal');
   const [newNote, setNewNote] = useState('');
+
+  // Bulk selection state & handlers
+  const [selectedTicketIds, setSelectedTicketIds] = useState<number[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<'Open' | 'In Progress' | 'Resolved' | 'Closed'>('In Progress');
+  const [bulkPriority, setBulkPriority] = useState<'Normal' | 'High' | 'Critical'>('High');
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedTicketIds(pagedTickets.map(t => t.id));
+    } else {
+      setSelectedTicketIds([]);
+    }
+  };
+
+  const handleToggleSelect = (id: number, e: React.MouseEvent | React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    setSelectedTicketIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleApplyBulkStatus = () => {
+    if (selectedTicketIds.length === 0) return;
+    setTickets(prev => prev.map(t => {
+      if (selectedTicketIds.includes(t.id)) {
+        return { ...t, status: bulkStatus, updated_at: new Date().toISOString() };
+      }
+      return t;
+    }));
+
+    const newEvents = { ...eventsMap };
+    selectedTicketIds.forEach(id => {
+      const ev: EventItem = {
+        id: Date.now() + Math.random(),
+        ticket_id: id,
+        kind: 'updated',
+        message: `Bulk status update → ${bulkStatus}`,
+        actor: 'Agent (Bulk)',
+        created_at: new Date().toISOString()
+      };
+      newEvents[id] = [ev, ...(newEvents[id] || [])];
+    });
+    setEventsMap(newEvents);
+    showToast(`Updated status to ${bulkStatus} for ${selectedTicketIds.length} tickets`);
+    setSelectedTicketIds([]);
+  };
+
+  const handleApplyBulkPriority = () => {
+    if (selectedTicketIds.length === 0) return;
+    setTickets(prev => prev.map(t => {
+      if (selectedTicketIds.includes(t.id)) {
+        return { ...t, priority: bulkPriority, updated_at: new Date().toISOString() };
+      }
+      return t;
+    }));
+
+    const newEvents = { ...eventsMap };
+    selectedTicketIds.forEach(id => {
+      const ev: EventItem = {
+        id: Date.now() + Math.random(),
+        ticket_id: id,
+        kind: 'updated',
+        message: `Bulk priority update → ${bulkPriority}`,
+        actor: 'Agent (Bulk)',
+        created_at: new Date().toISOString()
+      };
+      newEvents[id] = [ev, ...(newEvents[id] || [])];
+    });
+    setEventsMap(newEvents);
+    showToast(`Updated priority to ${bulkPriority} for ${selectedTicketIds.length} tickets`);
+    setSelectedTicketIds([]);
+  };
 
   // Sandbox form
   const [sandboxSender, setSandboxSender] = useState('student@example.com');
@@ -645,9 +715,6 @@ export default function App() {
           <button className={`nav ${activeView === 'settings' ? 'active' : ''}`} onClick={() => setActiveView('settings')}>
             <Settings size={18} /><span>Settings</span>
           </button>
-          <button className={`nav ${activeView === 'burger' ? 'active' : ''}`} onClick={() => setActiveView('burger')}>
-            <Utensils size={18} /><span>Burger & Burgundy</span>
-          </button>
         </div>
         <div className="foot">
           <div style={{ fontWeight: 600, color: 'var(--txt)', marginBottom: '2px' }}>RPA · Service Intelligence</div>
@@ -667,7 +734,6 @@ export default function App() {
               {activeView === 'kb' && <>Knowledge <span>Base</span></>}
               {activeView === 'team' && <>Team <span>& Users</span></>}
               {activeView === 'settings' && <>Workspace <span>Settings</span></>}
-              {activeView === 'burger' && <>Gourmet <span>Burger & Burgundy</span></>}
             </h1>
             <div className="sub" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
               <span className="indicator" style={{ background: connected ? 'var(--success)' : 'var(--burgundy)' }}></span>
@@ -925,6 +991,15 @@ export default function App() {
               <table>
                 <thead>
                   <tr>
+                    <th style={{ width: '40px' }}>
+                      <input
+                        type="checkbox"
+                        aria-label="Select all tickets"
+                        checked={pagedTickets.length > 0 && pagedTickets.every(t => selectedTicketIds.includes(t.id))}
+                        onChange={handleSelectAll}
+                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                      />
+                    </th>
                     <th>Ticket</th>
                     <th>Subject / sender</th>
                     <th>Category</th>
@@ -936,10 +1011,19 @@ export default function App() {
                 </thead>
                 <tbody id="ticketRows">
                   {pagedTickets.length === 0 ? (
-                    <tr><td colSpan={7} className="empty">No matching tickets</td></tr>
+                    <tr><td colSpan={8} className="empty">No matching tickets</td></tr>
                   ) : (
                     pagedTickets.map(t => (
                       <tr key={t.id} data-id={t.id} onClick={() => handleOpenTicket(t.id)}>
+                        <td onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ticket #${t.id}`}
+                            checked={selectedTicketIds.includes(t.id)}
+                            onChange={(e) => handleToggleSelect(t.id, e)}
+                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                          />
+                        </td>
                         <td>#{t.id}</td>
                         <td><b>{t.subject}</b><div className="muted">{t.sender}</div></td>
                         <td>{t.category}</td>
@@ -961,6 +1045,54 @@ export default function App() {
               </div>
             </div>
           </div>
+
+          {/* FLOATING BULK ACTION TOOLBAR */}
+          {selectedTicketIds.length > 0 && (
+            <div style={{
+              position: 'fixed',
+              bottom: '30px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: '#4A0E17',
+              color: '#FFFDF9',
+              padding: '16px 28px',
+              borderRadius: '20px',
+              boxShadow: '0 20px 50px rgba(74, 14, 23, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '20px',
+              zIndex: 100,
+              animation: 'rise 0.3s cubic-bezier(0.25, 1, 0.5, 1)'
+            }}>
+              <div style={{ fontWeight: 700, fontSize: '14px', borderRight: '1px solid rgba(255,255,255,0.2)', paddingRight: '20px' }}>
+                {selectedTicketIds.length} selected
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <select value={bulkStatus} onChange={e => setBulkStatus(e.target.value as any)} style={{ background: '#FFFDF9', color: '#28191C', padding: '8px 12px', fontSize: '13px' }}>
+                  <option>Open</option>
+                  <option>In Progress</option>
+                  <option>Resolved</option>
+                  <option>Closed</option>
+                </select>
+                <button onClick={handleApplyBulkStatus} style={{ background: '#E5A93C', color: '#4A0E17', border: 'none', padding: '9px 14px', borderRadius: '10px', fontWeight: 700, fontSize: '13px' }}>
+                  Update Status
+                </button>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '20px' }}>
+                <select value={bulkPriority} onChange={e => setBulkPriority(e.target.value as any)} style={{ background: '#FFFDF9', color: '#28191C', padding: '8px 12px', fontSize: '13px' }}>
+                  <option>Normal</option>
+                  <option>High</option>
+                  <option>Critical</option>
+                </select>
+                <button onClick={handleApplyBulkPriority} style={{ background: '#E5A93C', color: '#4A0E17', border: 'none', padding: '9px 14px', borderRadius: '10px', fontWeight: 700, fontSize: '13px' }}>
+                  Update Priority
+                </button>
+              </div>
+              <button onClick={() => setSelectedTicketIds([])} style={{ background: 'transparent', color: '#EADDD5', border: '1px solid rgba(255,255,255,0.2)', padding: '8px 12px', borderRadius: '10px', fontSize: '13px' }}>
+                Clear
+              </button>
+            </div>
+          )}
         </section>
 
         {/* AUTOMATION LAB VIEW */}
@@ -1088,10 +1220,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* BURGER & BURGUNDY VIEW */}
-        <section className={`view ${activeView !== 'burger' ? 'hidden' : ''}`}>
-          <BurgundyBurgerExperience />
-        </section>
+
 
         {/* TOAST */}
         {toastMessage && (
