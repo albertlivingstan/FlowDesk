@@ -20,8 +20,10 @@ import {
   Plus,
   X,
   SlidersHorizontal,
-  Search
+  Search,
+  Utensils
 } from 'lucide-react';
+import BurgundyBurgerExperience from './components/BurgundyBurgerExperience';
 
 interface Ticket {
   id: number;
@@ -260,7 +262,7 @@ function StatusDurationChart({ durations }: { durations: { status: string; avgHo
 export default function App() {
   const [apiKey, setApiKey] = useState('');
   const [connected, setConnected] = useState(false);
-  const [activeView, setActiveView] = useState<'overview' | 'tickets' | 'analytics' | 'automation' | 'kb' | 'team' | 'settings'>('overview');
+  const [activeView, setActiveView] = useState<'overview' | 'tickets' | 'analytics' | 'automation' | 'kb' | 'team' | 'settings' | 'burger'>('overview');
   const [daysRange, setDaysRange] = useState(30);
 
   // Tickets state
@@ -643,6 +645,9 @@ export default function App() {
           <button className={`nav ${activeView === 'settings' ? 'active' : ''}`} onClick={() => setActiveView('settings')}>
             <Settings size={18} /><span>Settings</span>
           </button>
+          <button className={`nav ${activeView === 'burger' ? 'active' : ''}`} onClick={() => setActiveView('burger')}>
+            <Utensils size={18} /><span>Burger & Burgundy</span>
+          </button>
         </div>
         <div className="foot">
           <div style={{ fontWeight: 600, color: 'var(--txt)', marginBottom: '2px' }}>RPA · Service Intelligence</div>
@@ -662,6 +667,7 @@ export default function App() {
               {activeView === 'kb' && <>Knowledge <span>Base</span></>}
               {activeView === 'team' && <>Team <span>& Users</span></>}
               {activeView === 'settings' && <>Workspace <span>Settings</span></>}
+              {activeView === 'burger' && <>Gourmet <span>Burger & Burgundy</span></>}
             </h1>
             <div className="sub" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
               <span className="indicator" style={{ background: connected ? 'var(--success)' : 'var(--burgundy)' }}></span>
@@ -1080,6 +1086,11 @@ export default function App() {
               <button className="primary" style={{ gridColumn: '1/-1' }}>Save Workspace Configuration</button>
             </div>
           </div>
+        </section>
+
+        {/* BURGER & BURGUNDY VIEW */}
+        <section className={`view ${activeView !== 'burger' ? 'hidden' : ''}`}>
+          <BurgundyBurgerExperience />
         </section>
 
         {/* TOAST */}
