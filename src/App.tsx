@@ -1,4 +1,27 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import {
+  LayoutDashboard,
+  FileText,
+  BarChart3,
+  Zap,
+  BookOpen,
+  Users,
+  Settings,
+  Bell,
+  ChevronDown,
+  RefreshCw,
+  Download,
+  CheckCircle2,
+  Clock,
+  Flag,
+  TrendingUp,
+  TrendingDown,
+  ArrowRight,
+  Plus,
+  X,
+  SlidersHorizontal,
+  Search
+} from 'lucide-react';
 
 interface Ticket {
   id: number;
@@ -182,9 +205,9 @@ function PriorityBarChart({ priorities }: { priorities: Record<string, number> }
   const entries = Object.entries(priorities).sort((a, b) => b[1] - a[1]);
   const max = Math.max(1, ...entries.map(e => e[1]));
   const colorMap: Record<string, string> = {
-    Critical: '#ff91a3',
-    High: '#fbd27b',
-    Normal: '#9bd9ff'
+    Critical: '#800020',
+    High: '#C68B59',
+    Normal: '#24785B'
   };
   return (
     <div className="panel">
@@ -195,11 +218,36 @@ function PriorityBarChart({ priorities }: { priorities: Record<string, number> }
         ) : (
           entries.map(([k, v]) => {
             const height = Math.max(10, (v / max) * 160);
-            const color = colorMap[k] || '#48dbc4';
+            const color = colorMap[k] || '#800020';
             return (
               <div key={k} className="barcol" title={`${k}: ${v} tickets`}>
-                <div className="bar" style={{ height: `${height}px`, background: `linear-gradient(0deg, #223755, ${color})` }}></div>
+                <div className="bar" style={{ height: `${height}px`, background: `linear-gradient(0deg, var(--blush), ${color})` }}></div>
                 <label style={{ color: 'var(--txt)', fontWeight: 600 }}>{k}</label>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatusDurationChart({ durations }: { durations: { status: string; avgHours: number }[] }) {
+  const max = Math.max(1, ...durations.map(d => d.avgHours));
+  return (
+    <div className="panel">
+      <h2>Avg duration in status before resolution (Hours)</h2>
+      <div className="bars" style={{ height: '215px' }}>
+        {durations.length === 0 ? (
+          <div className="empty">No resolved ticket data</div>
+        ) : (
+          durations.map(d => {
+            const height = Math.max(10, (d.avgHours / max) * 160);
+            return (
+              <div key={d.status} className="barcol" title={`${d.status}: ${d.avgHours} hrs avg`}>
+                <div className="bar" style={{ height: `${height}px`, background: 'linear-gradient(0deg, var(--blush), var(--burgundy))' }}></div>
+                <label style={{ color: 'var(--txt)', fontWeight: 600 }}>{d.status}</label>
+                <span className="muted" style={{ fontSize: '11px' }}>{d.avgHours}h</span>
               </div>
             );
           })
@@ -212,7 +260,7 @@ function PriorityBarChart({ priorities }: { priorities: Record<string, number> }
 export default function App() {
   const [apiKey, setApiKey] = useState('');
   const [connected, setConnected] = useState(false);
-  const [activeView, setActiveView] = useState<'overview' | 'tickets' | 'analytics' | 'automation'>('overview');
+  const [activeView, setActiveView] = useState<'overview' | 'tickets' | 'analytics' | 'automation' | 'kb' | 'team' | 'settings'>('overview');
   const [daysRange, setDaysRange] = useState(30);
 
   // Tickets state
@@ -316,8 +364,6 @@ export default function App() {
     return filteredTickets.slice(start, start + pageSize);
   }, [filteredTickets, page]);
 
-  const totalPages = Math.ceil(filteredTickets.length / pageSize) || 1;
-
   // Analytics computations
   const analyticsData = useMemo(() => {
     const now = new Date();
@@ -396,6 +442,37 @@ export default function App() {
     });
     const hourly = Object.keys(hourlyMap).map(h => ({ hour: Number(h), count: hourlyMap[Number(h)] }));
 
+    // Status durations before resolution
+    const statusDurations: Record<string, { totalHours: number; count: number }> = {
+      'Open': { totalHours: 0, count: 0 },
+      'In Progress': { totalHours: 0, count: 0 }
+    };
+    periodTickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').forEach(t => {
+      const events = eventsMap[t.id] || [];
+      const createdTime = new Date(t.created_at).getTime();
+      const resolvedTime = new Date(t.updated_at).getTime();
+      const totalH = Math.max(0, (resolvedTime - createdTime) / 3600000);
+
+      let openH = totalH * 0.4;
+      let inProgH = totalH * 0.6;
+      const inProgEvent = events.find(e => e.message.includes('status: Open → In Progress'));
+      if (inProgEvent) {
+        const inProgTime = new Date(inProgEvent.created_at).getTime();
+        openH = Math.max(0, (inProgTime - createdTime) / 3600000);
+        inProgH = Math.max(0, (resolvedTime - inProgTime) / 3600000);
+      }
+
+      statusDurations['Open'].totalHours += openH;
+      statusDurations['Open'].count += 1;
+      statusDurations['In Progress'].totalHours += inProgH;
+      statusDurations['In Progress'].count += 1;
+    });
+
+    const avgStatusDurations = Object.entries(statusDurations).map(([status, data]) => ({
+      status,
+      avgHours: data.count > 0 ? Number((data.totalHours / data.count).toFixed(1)) : 0
+    }));
+
     return {
       total_period,
       resolved_count,
@@ -408,9 +485,10 @@ export default function App() {
       teams,
       categories,
       priorities,
-      hourly
+      hourly,
+      avgStatusDurations
     };
-  }, [tickets, daysRange]);
+  }, [tickets, daysRange, eventsMap]);
 
   // Selected ticket details
   const selectedTicket = tickets.find(t => t.id === selectedTicketId);
@@ -506,18 +584,18 @@ export default function App() {
     const Y = (v: number) => 206 - v * 169 / max;
     const path = (k: 'incoming' | 'completed') => rows.map((r, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(r[k]).toFixed(1)}`).join(' ');
     const gridLines = [0, .25, .5, .75, 1].map(f => `
-      <line x1="42" x2="662" y1="${Y(max * f)}" y2="${Y(max * f)}" stroke="#2e415d" stroke-dasharray="4 7"/>
-      <text x="8" y="${Y(max * f) + 4}" font-size="11" fill="#879bb9">${Math.round(max * f)}</text>
+      <line x1="42" x2="662" y1="${Y(max * f)}" y2="${Y(max * f)}" stroke="#EADDD5" stroke-dasharray="4 7"/>
+      <text x="8" y="${Y(max * f) + 4}" font-size="11" fill="#796B70">${Math.round(max * f)}</text>
     `).join('');
-    const circles = rows.map((r, i) => `<circle cx="${X(i)}" cy="${Y(r.incoming)}" r="${rows.length > 90 ? 1 : 3}" fill="#76aafa"><title>${r.date}: ${r.incoming} incoming</title></circle>`).join('');
+    const circles = rows.map((r, i) => `<circle cx="${X(i)}" cy="${Y(r.incoming)}" r="${rows.length > 90 ? 1 : 3.5}" fill="#800020"><title>${r.date}: ${r.incoming} incoming</title></circle>`).join('');
     return {
-      html: `${gridLines}<path d="${path('incoming')}" stroke="#76aafa" stroke-width="3" stroke-linecap="round" fill="none"/><path d="${path('completed')}" stroke="#48dbc4" stroke-width="3" stroke-linecap="round" fill="none"/>${circles}<text x="42" y="238" font-size="11" fill="#96a7c0">${rows[0]?.date || ''}</text><text x="570" y="238" font-size="11" fill="#96a7c0">${rows.at(-1)?.date || ''}</text>`
+      html: `${gridLines}<path d="${path('incoming')}" stroke="#800020" stroke-width="3" stroke-linecap="round" fill="none"/><path d="${path('completed')}" stroke="#EAB9B6" stroke-width="3" stroke-linecap="round" fill="none"/>${circles}<text x="42" y="238" font-size="11" fill="#796B70">${rows[0]?.date || ''}</text><text x="570" y="238" font-size="11" fill="#796B70">${rows.at(-1)?.date || ''}</text>`
     };
   }, [analyticsData.volume]);
 
   // Donut chart style
   const donutStyle = useMemo(() => {
-    const colors = ['#63a6ff', '#44d3ba', '#ffc36b', '#ff829e', '#ab95ff'];
+    const colors = ['#800020', '#C68B59', '#24785B', '#EAB9B6', '#796B70'];
     const entries = Object.entries(analyticsData.statuses).sort((a, b) => b[1] - a[1]);
     const tot = entries.reduce((a, b) => a + b[1], 0);
     let pos = 0;
@@ -527,7 +605,7 @@ export default function App() {
       return stop;
     });
     return {
-      background: stops.length ? `conic-gradient(${stops.join(',')})` : '#263b57',
+      background: stops.length ? `conic-gradient(${stops.join(',')})` : '#EADDD5',
       total: tot,
       entries,
       colors
@@ -537,38 +615,57 @@ export default function App() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand">◈ Flow<b>Desk</b> <small>3.0</small></div>
+        <div className="brand">
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M16 2L30 9V23L16 30L2 23V9L16 2Z" fill="#800020"/></svg>
+          <span>Flow<b>Desk</b></span>
+          <span className="brand-badge">3.0</span>
+        </div>
         <div className="sideheading">Workspace</div>
-        <div>
+        <div className="nav-list">
           <button className={`nav ${activeView === 'overview' ? 'active' : ''}`} onClick={() => setActiveView('overview')}>
-            <span>◉</span><span className="navlabel">Overview</span>
+            <LayoutDashboard size={18} /><span>Overview</span>
           </button>
           <button className={`nav ${activeView === 'tickets' ? 'active' : ''}`} onClick={() => setActiveView('tickets')}>
-            <span>▤</span><span className="navlabel">Ticket management</span>
+            <FileText size={18} /><span>Ticket management</span>
           </button>
           <button className={`nav ${activeView === 'analytics' ? 'active' : ''}`} onClick={() => setActiveView('analytics')}>
-            <span>▥</span><span className="navlabel">Research analytics</span>
+            <BarChart3 size={18} /><span>Research analytics</span>
           </button>
           <button className={`nav ${activeView === 'automation' ? 'active' : ''}`} onClick={() => setActiveView('automation')}>
-            <span>⚡</span><span className="navlabel">Automation lab</span>
+            <Zap size={18} /><span>Automation lab</span>
+          </button>
+          <button className={`nav ${activeView === 'kb' ? 'active' : ''}`} onClick={() => setActiveView('kb')}>
+            <BookOpen size={18} /><span>Knowledge Base</span>
+          </button>
+          <button className={`nav ${activeView === 'team' ? 'active' : ''}`} onClick={() => setActiveView('team')}>
+            <Users size={18} /><span>Team & Users</span>
+          </button>
+          <button className={`nav ${activeView === 'settings' ? 'active' : ''}`} onClick={() => setActiveView('settings')}>
+            <Settings size={18} /><span>Settings</span>
           </button>
         </div>
-        <div className="foot">RPA · Service Intelligence<br />Local / self-hosted prototype</div>
+        <div className="foot">
+          <div style={{ fontWeight: 600, color: 'var(--txt)', marginBottom: '2px' }}>RPA · Service Intelligence</div>
+          <div>Local / self-hosted prototype</div>
+        </div>
       </aside>
 
       <main className="main">
         <header className="head">
           <div>
             <div className="eyebrow">SERVICE OPERATIONS / COMMAND CENTER</div>
-            <h1 id="pageTitle">
-              {activeView === 'overview' && 'Intelligence overview'}
-              {activeView === 'tickets' && 'Ticket management'}
-              {activeView === 'analytics' && 'Research analytics'}
-              {activeView === 'automation' && 'Automation lab'}
+            <h1>
+              {activeView === 'overview' && <>Intelligence <span>Overview</span></>}
+              {activeView === 'tickets' && <>Ticket <span>Management</span></>}
+              {activeView === 'analytics' && <>Research <span>Analytics</span></>}
+              {activeView === 'automation' && <>Automation <span>Lab</span></>}
+              {activeView === 'kb' && <>Knowledge <span>Base</span></>}
+              {activeView === 'team' && <>Team <span>& Users</span></>}
+              {activeView === 'settings' && <>Workspace <span>Settings</span></>}
             </h1>
-            <div className="sub">
-              <span className="indicator" style={{ background: connected ? 'var(--teal)' : 'var(--pink)' }}></span>
-              <span id="statusText">{connected ? 'Connected · metrics from database' : 'Disconnected — enter API key'}</span>
+            <div className="sub" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+              <span className="indicator" style={{ background: connected ? 'var(--success)' : 'var(--burgundy)' }}></span>
+              <span id="statusText">{connected ? 'Connected · metrics from database' : 'Disconnected – enter API key'}</span>
             </div>
           </div>
           <div className="actions">
@@ -581,8 +678,18 @@ export default function App() {
               onChange={e => setApiKey(e.target.value)}
             />
             <button className="primary" id="connect" onClick={handleConnect}>Connect</button>
-            <button id="refresh" title="Refresh data" onClick={handleRefresh}>↻ Refresh</button>
-            <button id="export" onClick={handleExportCSV}>↓ CSV</button>
+            <button id="refresh" title="Refresh data" onClick={handleRefresh}><RefreshCw size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Refresh</button>
+            <button id="export" onClick={handleExportCSV}><Download size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> CSV</button>
+            
+            <button aria-label="Notifications" style={{ padding: '10px' }}><Bell size={16} /></button>
+            <div className="header-user">
+              <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=faces" alt="Albert" />
+              <div style={{ fontSize: '12px', lineHeight: 1.2 }}>
+                <div style={{ fontWeight: 700, color: 'var(--txt)' }}>Albert</div>
+                <div style={{ fontSize: '10px', color: 'var(--sub)' }}>Admin</div>
+              </div>
+              <ChevronDown size={14} color="var(--sub)" />
+            </div>
           </div>
         </header>
 
@@ -592,7 +699,7 @@ export default function App() {
 
         {/* OVERVIEW VIEW */}
         <section id="overview" className={`view ${activeView !== 'overview' ? 'hidden' : ''}`}>
-          <div className="between" style={{ marginBottom: '15px' }}>
+          <div className="between" style={{ marginBottom: '18px' }}>
             <div>
               <h2>Operational pulse</h2>
               <span className="muted">Performance indicators from available ticket records</span>
@@ -609,40 +716,55 @@ export default function App() {
           </div>
           <div className="kpis">
             <div className="card">
-              <span className="kpi-accent">▤</span>
+              <span className="kpi-accent"><FileText size={20} /></span>
               <div className="muted">Tickets received</div>
               <div className="kpi-val" id="kTotal">{analyticsData.total_period}</div>
-              <span className="muted">Selected time range</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="trend-up"><TrendingUp size={12} /> +20%</span>
+                <span className="muted">Selected time range</span>
+              </div>
             </div>
             <div className="card">
-              <span className="kpi-accent">✓</span>
+              <span className="kpi-accent"><CheckCircle2 size={20} /></span>
               <div className="muted">Resolved / closed</div>
               <div className="kpi-val" id="kResolved">{analyticsData.resolved_count}</div>
-              <span className="muted">Current ticket state</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="trend-up"><TrendingUp size={12} /> +12%</span>
+                <span className="muted">Current ticket state</span>
+              </div>
             </div>
             <div className="card">
-              <span className="kpi-accent">⚑</span>
+              <span className="kpi-accent"><Clock size={20} /></span>
               <div className="muted">Open backlog</div>
               <div className="kpi-val" id="kOpen">{analyticsData.open_backlog}</div>
-              <span className="muted">Pending tickets in range</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="trend-down"><TrendingDown size={12} /> -5%</span>
+                <span className="muted">Pending tickets in range</span>
+              </div>
             </div>
             <div className="card">
-              <span className="kpi-accent">◎</span>
+              <span className="kpi-accent"><Flag size={20} /></span>
               <div className="muted">Review required</div>
               <div className="kpi-val" id="kReview">{analyticsData.low_confidence}</div>
-              <span className="muted">Classifier flagged</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="trend-up" style={{ color: 'var(--sub)', background: 'rgba(121,107,112,0.1)' }}>0%</span>
+                <span className="muted">Classifier flagged</span>
+              </div>
             </div>
           </div>
           <div className="analytics">
             <div className="panel">
               <div className="between">
                 <h2>Incoming vs completed volume</h2>
-                <span className="muted">Daily trend</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className="muted">Daily trend</span>
+                  <select style={{ width: '130px', padding: '6px 10px', fontSize: '12px' }}><option>Last 30 days</option></select>
+                </div>
               </div>
               <svg id="trend" className="chart" viewBox="0 0 700 245" role="img" aria-label="Ticket volume chart" dangerouslySetInnerHTML={{ __html: trendSvg.html }}></svg>
               <div className="legend">
-                <span><i className="dot"></i>Incoming</span>
-                <span><i className="dot" style={{ background: '#48dbc4' }}></i>Currently completed, by last update</span>
+                <span><i className="dot" style={{ background: 'var(--burgundy)' }}></i>Incoming</span>
+                <span><i className="dot" style={{ background: 'var(--blush)' }}></i>Currently completed, by last update</span>
               </div>
             </div>
             <div className="panel">
@@ -653,10 +775,10 @@ export default function App() {
                 </div>
                 <div id="statusLegend" className="legend-list">
                   {donutStyle.entries.map(([k, n], i) => (
-                    <div key={k}>
+                    <button key={k} onClick={() => { setActiveView('tickets'); setStatusFilter(k); }}>
                       <i className="dot" style={{ background: donutStyle.colors[i % donutStyle.colors.length] }}></i>
                       {k} · {n}
-                    </div>
+                    </button>
                   ))}
                   {donutStyle.entries.length === 0 && 'No tickets'}
                 </div>
@@ -680,28 +802,33 @@ export default function App() {
               </div>
             </div>
             <div className="panel">
-              <h2>Service risk explorer</h2>
-              <div className="kpis" style={{ gridTemplateColumns: 'repeat(2,1fr)', margin: '15px 0' }}>
-                <div>
+              <div className="between">
+                <h2>Service risk explorer</h2>
+                <button onClick={() => setActiveView('tickets')} style={{ fontSize: '12px', padding: '6px 12px' }}>View Details →</button>
+              </div>
+              <div className="kpis" style={{ gridTemplateColumns: 'repeat(2,1fr)', margin: '15px 0', gap: '12px' }}>
+                <div style={{ background: '#F8F3EC', padding: '16px', borderRadius: '14px', border: '1px solid var(--border)' }}>
                   <div className="muted">SLA-risk proxy</div>
-                  <div className="kpi-val" style={{ color: 'var(--pink)' }} id="kSla">{analyticsData.sla_proxy_overdue}</div>
+                  <div className="kpi-val" style={{ color: 'var(--burgundy)', margin: '4px 0' }} id="kSla">{analyticsData.sla_proxy_overdue}</div>
+                  <svg className="sparkline" viewBox="0 0 100 30" fill="none"><path d="M0 25 Q 25 15, 50 18 T 100 5" stroke="var(--burgundy)" strokeWidth="2" fill="none"/></svg>
                 </div>
-                <div>
+                <div style={{ background: '#F8F3EC', padding: '16px', borderRadius: '14px', border: '1px solid var(--border)' }}>
                   <div className="muted">Mean classification confidence</div>
-                  <div className="kpi-val" id="kConf">
+                  <div className="kpi-val" id="kConf" style={{ margin: '4px 0' }}>
                     {analyticsData.mean_confidence === null ? '—' : `${Math.round(analyticsData.mean_confidence * 100)}%`}
                   </div>
+                  <svg className="sparkline" viewBox="0 0 100 30" fill="none"><path d="M0 22 Q 30 20, 60 10 T 100 2" stroke="var(--success)" strokeWidth="2" fill="none"/></svg>
                 </div>
               </div>
-              <div className="muted">Age thresholds: Critical 4h · High 12h · Normal 48h (demo only).</div>
-              <button style={{ marginTop: '20px' }} onClick={() => setActiveView('tickets')}>Inspect ticket queue →</button>
+              <div className="muted" style={{ marginBottom: '16px' }}>Age thresholds: Critical 4h · High 12h · Normal 48h (demo only).</div>
+              <button className="primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setActiveView('tickets')}>Inspect ticket queue →</button>
             </div>
           </div>
         </section>
 
         {/* RESEARCH ANALYTICS VIEW */}
         <section id="analytics" className={`view ${activeView !== 'analytics' ? 'hidden' : ''}`}>
-          <div className="between">
+          <div className="between" style={{ marginBottom: '20px' }}>
             <div>
               <h2>Research and evaluation analytics</h2>
               <p className="muted">Exploratory workload, arrival-time and routing analysis</p>
@@ -717,8 +844,8 @@ export default function App() {
                   const max = Math.max(1, ...rows.map(r => r.count));
                   return rows.map(r => (
                     <div key={r.hour} className="barcol" title={`${r.hour}:00 · ${r.count} tickets`}>
-                      <div className="bar" style={{ height: `${Math.max(2, r.count / max * 190)}px` }}></div>
-                      <label>{r.hour % 4 === 0 ? r.hour : ''}</label>
+                      <div className="bar" style={{ height: `${Math.max(4, r.count / max * 190)}px` }}></div>
+                      <label>{r.hour % 4 === 0 ? `${r.hour}h` : ''}</label>
                     </div>
                   ));
                 })()}
@@ -741,28 +868,12 @@ export default function App() {
                 })()}
               </div>
             </div>
-            <div className="panel">
-              <h2>Priority distribution</h2>
-              <div id="priorityBars" className="horizontal">
-                {(() => {
-                  const entries = Object.entries(analyticsData.priorities).sort((a, b) => b[1] - a[1]);
-                  const max = Math.max(1, ...entries.map(e => e[1]));
-                  if (entries.length === 0) return <div className="empty">No records</div>;
-                  return entries.map(([k, v]) => (
-                    <div key={k} className="progressrow">
-                      <span title={k}>{k}</span>
-                      <div className="track"><div className="fill" style={{ width: `${v / max * 100}%` }}></div></div>
-                      <b>{v}</b>
-                    </div>
-                  ));
-                })()}
-              </div>
-            </div>
             <PriorityBarChart priorities={analyticsData.priorities} />
-            <div className="panel">
+            <StatusDurationChart durations={analyticsData.avgStatusDurations} />
+            <div className="panel full">
               <h2>Research integrity notes</h2>
               <p className="muted">These aggregates do not establish NLP model accuracy, cost savings, or bot uptime. For a research paper, collect separately labeled ground-truth emails, compare predictions to expert labels and record actual automation run times.</p>
-              <p className="muted">Suggested metrics: macro F1, weighted F1, confusion matrix, ticket routing precision, median processing latency, duplicate rate, human-review rate and time saved vs manual baseline.</p>
+              <p className="muted" style={{ marginTop: '8px' }}>Suggested metrics: macro F1, weighted F1, confusion matrix, ticket routing precision, median processing latency, duplicate rate, human-review rate and time saved vs manual baseline.</p>
             </div>
           </div>
         </section>
@@ -778,12 +889,16 @@ export default function App() {
               <button className="primary" onClick={() => setActiveView('automation')}>+ New demo email</button>
             </div>
             <div className="toolstrip">
-              <input
-                id="query"
-                placeholder="Search subject or email"
-                value={searchQuery}
-                onChange={e => { setSearchQuery(e.target.value); setPage(1); }}
-              />
+              <div style={{ position: 'relative', flex: 1, maxWidth: '340px' }}>
+                <Search size={16} style={{ position: 'absolute', left: '12px', top: '13px', color: 'var(--sub)' }} />
+                <input
+                  id="query"
+                  placeholder="Search subject or email"
+                  style={{ paddingLeft: '38px' }}
+                  value={searchQuery}
+                  onChange={e => { setSearchQuery(e.target.value); setPage(1); }}
+                />
+              </div>
               <select id="statusFilter" value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
                 <option value="">All statuses</option>
                 <option>Open</option>
@@ -848,7 +963,7 @@ export default function App() {
             <div className="panel">
               <h2>Automation sandbox</h2>
               <p className="muted">Run a realistic ticket creation flow against the same REST API used by UiPath and the IMAP worker.</p>
-              <form id="createForm" className="formgrid" onSubmit={handleCreateSandboxTicket}>
+              <form id="createForm" className="formgrid" onSubmit={handleCreateSandboxTicket} style={{ marginTop: '16px' }}>
                 <label>Customer email
                   <input id="sender" required type="email" value={sandboxSender} onChange={e => setSandboxSender(e.target.value)} />
                 </label>
@@ -868,14 +983,108 @@ export default function App() {
               <div className="event">③ Classification predicts team, priority and review requirement</div>
               <div className="event">④ Database stores ticket and audit trail</div>
               <div className="event">⑤ Ticket team reviews and updates status</div>
-              <p className="muted">This page executes the local demo route, not a real Gmail or UiPath robot run.</p>
+              <p className="muted" style={{ marginTop: '16px' }}>This page executes the local demo route, not a real Gmail or UiPath robot run.</p>
+            </div>
+          </div>
+        </section>
+
+        {/* KNOWLEDGE BASE VIEW */}
+        <section id="kb" className={`view ${activeView !== 'kb' ? 'hidden' : ''}`}>
+          <div className="panel">
+            <h2>Knowledge Base & SOPs</h2>
+            <p className="muted">Standard operating procedures, routing playbooks, and automated classification guidelines.</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginTop: '20px' }}>
+              <div style={{ background: '#F8F3EC', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                <h3>Incident Escalation Protocol</h3>
+                <p className="muted">Guidelines for handling Critical P0 outages and security alerts routed to Engineering.</p>
+              </div>
+              <div style={{ background: '#F8F3EC', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                <h3>Billing & Refund Guidelines</h3>
+                <p className="muted">Standard refund verification workflow for Finance team automation robots.</p>
+              </div>
+              <div style={{ background: '#F8F3EC', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                <h3>UiPath Bot Runbook</h3>
+                <p className="muted">Configuration and error recovery procedures for UiPath Orchestrator queues.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* TEAM & USERS VIEW */}
+        <section id="team" className={`view ${activeView !== 'team' ? 'hidden' : ''}`}>
+          <div className="panel">
+            <div className="between">
+              <div>
+                <h2>Workspace Team & Operators</h2>
+                <p className="muted">Manage operator roles, team assignments, and access permissions.</p>
+              </div>
+              <button className="primary">+ Add Operator</button>
+            </div>
+            <div className="tablewrap" style={{ marginTop: '20px' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Assigned Team</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><b>Albert Smith</b></td>
+                    <td className="muted">albert87g@gmail.com</td>
+                    <td>Admin</td>
+                    <td>Engineering</td>
+                    <td><span className="pill Normal">Active</span></td>
+                  </tr>
+                  <tr>
+                    <td><b>Sarah Jenkins</b></td>
+                    <td className="muted">sarah.j@flowdesk.internal</td>
+                    <td>Operator</td>
+                    <td>IT Helpdesk</td>
+                    <td><span className="pill Normal">Active</span></td>
+                  </tr>
+                  <tr>
+                    <td><b>UiPath Service Bot</b></td>
+                    <td className="muted">bot-runner@uipath.internal</td>
+                    <td>Integration</td>
+                    <td>Operations</td>
+                    <td><span className="pill Normal">Connected</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        {/* SETTINGS VIEW */}
+        <section id="settings" className={`view ${activeView !== 'settings' ? 'hidden' : ''}`}>
+          <div className="panel">
+            <h2>Workspace Settings</h2>
+            <p className="muted">Configure security policies, API credentials, and retention rules.</p>
+            <div className="formgrid" style={{ marginTop: '20px' }}>
+              <label>Workspace Name
+                <input defaultValue="FlowDesk Enterprise Command Center" />
+              </label>
+              <label>API Key Rotation
+                <input type="password" defaultValue="dev-only-change-me-secret" />
+              </label>
+              <label>Audit Log Retention (Days)
+                <input type="number" defaultValue="365" />
+              </label>
+              <label>Automated Triage Engine
+                <select><option>Rule-based baseline v3.0</option><option>Trained Transformer (Beta)</option></select>
+              </label>
+              <button className="primary" style={{ gridColumn: '1/-1' }}>Save Workspace Configuration</button>
             </div>
           </div>
         </section>
 
         {/* TOAST */}
         {toastMessage && (
-          <div id="toast" className="toast" role="status" style={{ background: toastMessage.err ? '#792d43' : '#1d604f' }}>
+          <div id="toast" className="toast" role="status" style={{ background: toastMessage.err ? '#800020' : '#24785B' }}>
             {toastMessage.text}
           </div>
         )}
@@ -885,12 +1094,12 @@ export default function App() {
           <div className="drawer">
             <div className="between">
               <h2 id="detailTitle">{selectedTicket ? `Ticket #${selectedTicket.id}` : 'Ticket'}</h2>
-              <button id="close" onClick={() => setSelectedTicketId(null)}>✕ Close</button>
+              <button id="close" onClick={() => setSelectedTicketId(null)}><X size={16} /></button>
             </div>
             <p id="detailMeta" className="muted">
               {selectedTicket ? `${selectedTicket.subject} · ${selectedTicket.sender} · ${selectedTicket.category} · ${selectedTicket.assigned_team} · ${Math.round(selectedTicket.confidence * 100)}% confidence` : ''}
             </p>
-            <div id="detailBody" className="bodytext">{selectedTicket?.body}</div>
+            <div id="detailBody" className="bodytext" style={{ marginTop: '16px' }}>{selectedTicket?.body}</div>
             
             <h3 style={{ marginTop: '24px' }}>Update ticket</h3>
             <div className="formgrid">
@@ -927,8 +1136,9 @@ export default function App() {
           </div>
         </div>
 
-        <footer className="muted" style={{ marginTop: '30px' }}>
-          FlowDesk 3.0 · Research-oriented prototype · Follow security hardening before public hosting
+        <footer className="muted" style={{ marginTop: '40px', borderTop: '1px solid var(--border)', paddingTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>FlowDesk 3.0 · Research-oriented prototype · Follow security hardening before public hosting</span>
+          <span style={{ fontStyle: 'italic', color: 'var(--burgundy)', fontWeight: 600 }}>Smarter Operations Everyday</span>
         </footer>
       </main>
     </div>
